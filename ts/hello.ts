@@ -29,13 +29,8 @@ function run() {
     createjs.Ticker.on("tick", onTick);
 }
 
-function onTick() {
-    boid.steer(new Vector2D(stage.mouseX, stage.mouseY).sub(boid.position));
-    boidBmp.x = boid.position.x;
-    boidBmp.y = boid.position.y;
-    stage.update();
-}
 
+var EPS = 0.0001;
 
 class Vector2D {
     constructor(public x: number, public y: number) {}
@@ -75,7 +70,7 @@ class Vector2D {
     }
     norm(): Vector2D {
         var l = this.len();
-        if (l > 0)
+        if (l > EPS)
             return this.div(l);
         else
             return this;
@@ -108,4 +103,45 @@ class Boid {
             truncate(this.maxSpeed);
         this.position = this.position.add(this.velocity);
     }
+}
+
+function seek(boid: Boid, target: Vector2D): Vector2D {
+    var desiredVelocity = target.sub(boid.position).norm().mul(boid.maxSpeed);
+    return desiredVelocity.sub(boid.velocity);
+}
+
+function flee(boid: Boid, target: Vector2D): Vector2D {
+    var desiredVelocity = boid.position.sub(target).norm().mul(boid.maxSpeed);
+    return desiredVelocity.sub(boid.velocity);
+}
+
+function arrival(boid: Boid, target: Vector2D, 
+                 slowingDistance: number = 100): Vector2D {
+    var targetOffset = target.sub(boid.position);
+    var distance = targetOffset.len();
+    if (distance < EPS)
+        return new Vector2D(0, 0);
+    var rampedSpeed = boid.maxSpeed * (distance / slowingDistance);
+    var clippedSpeed = Math.min(rampedSpeed, slowingDistance);
+    var desiredVelocity = targetOffset.mul(clippedSpeed / distance);
+    return desiredVelocity.sub(boid.velocity);
+}
+
+
+var behs = [seek, flee, arrival];
+var curBehIndex: number = 2;
+
+stage.on("stagemouseup", () => { 
+    curBehIndex = (curBehIndex + 1) % behs.length; 
+    console.log("Changed behavior to " + behs[curBehIndex].name);
+});
+
+function onTick() {
+    boid.maxSpeed = 6;
+    var beh = behs[curBehIndex];
+    var steering = beh(boid, new Vector2D(stage.mouseX, stage.mouseY));
+    boid.steer(steering);
+    boidBmp.x = boid.position.x - 8;
+    boidBmp.y = boid.position.y - 8;
+    stage.update();
 }
